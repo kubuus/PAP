@@ -21,28 +21,32 @@ void RegMemToReg (uint8_t bytes[2], FILE* file)
 
     uint8_t source = dw & 2 ? rm : reg;
     uint8_t dest   = dw & 2 ? reg : rm;
-
-    switch(mod)
+    
+    if(mod == 0b11)
     {
-    case(0b11):
         printf("%s", regTable[dest + (8 * (dw & 1))]);
         printf(", ");
 
         printf("%s", regTable[source + (8 * (dw & 1))]);
         printf("\n");
-        break;
+        return;
+    }
+
+    char eac[32];
+
+    switch(mod)
+    {
     case(0b10):
         {
         uint8_t displacement[2];
         fread(displacement, sizeof(uint8_t), 2, file);
         
         uint16_t disp = displacement[0] | (displacement[1] << 8);
-        char eac[32]; 
-        sprintf(eac, "[%s + %d]", displacementTable[rm], disp);
-        if (dw & 2)
-            printf("%s, %s\n", eac, regTable[reg + (8 * (dw & 1))]);
+        if(disp != 0)
+            sprintf(eac, "[%s + %d]", displacementTable[rm], disp);
         else
-            printf("%s, %s\n", regTable[reg + (8 * (dw & 1))], eac);
+            sprintf(eac, "[%s]", displacementTable[rm]);
+
         break;
         }
     case(0b01):
@@ -50,17 +54,15 @@ void RegMemToReg (uint8_t bytes[2], FILE* file)
         uint8_t displacement;
         fread(&displacement, sizeof(uint8_t), 1, file);
         
-        char eac[32]; 
-        sprintf(eac, "[%s + %d]", displacementTable[rm], displacement);
-        if (dw & 2)
-            printf("%s, %s\n", eac, regTable[reg + (8 * (dw & 1))]);
+        if(displacement != 0)
+            sprintf(eac, "[%s + %d]", displacementTable[rm], displacement);
         else
-            printf("%s, %s\n", regTable[reg + (8 * (dw & 1))], eac);
-        break;
+            sprintf(eac, "[%s]", displacementTable[rm]);
+
+       break;
         }
     case(0b00):
         {
-        char eac[32];
         if (rm == 0b110)
         {
             uint8_t displacement[2];
@@ -72,14 +74,16 @@ void RegMemToReg (uint8_t bytes[2], FILE* file)
         else 
             sprintf(eac, "[%s]", displacementTable[rm]);
         
-        if (dw & 2)
-            printf("%s, %s\n", eac, regTable[reg + (8 * (dw & 1))]);
-        else
-            printf("%s, %s\n", regTable[reg + (8 * (dw & 1))], eac);
-        
+       
         break;
         }
     }
+
+    if (dw & 2)
+        printf("%s, %s\n", regTable[reg + (8 * (dw & 1))], eac);
+    else
+        printf("%s, %s\n", eac, regTable[reg + (8 * (dw & 1))]);
+ 
 }
 
 int main(int numArgs, const char** args)
@@ -102,6 +106,7 @@ int main(int numArgs, const char** args)
     uint8_t instruction = 0;
     while(fread(&instruction, sizeof(uint8_t), 1, input))
     {
+        printf("mov ");
         uint8_t opcode = instruction & 0b11111100;
         if (opcode == 0b10001000)
         {
