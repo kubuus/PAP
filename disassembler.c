@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <stdio.h>
+#include <stdbool.h>
 
 const char* regTable[16] =
 {
@@ -41,9 +42,15 @@ void RegMemToReg (uint8_t bytes[2], FILE* file)
         uint8_t displacement[2];
         fread(displacement, sizeof(uint8_t), 2, file);
         
-        uint16_t disp = displacement[0] | (displacement[1] << 8);
+        int16_t disp = displacement[0] | (displacement[1] << 8);
         if(disp != 0)
-            sprintf(eac, "[%s + %d]", displacementTable[rm], disp);
+        {
+            if (disp > 0)
+                sprintf(eac, "[%s + %d]", displacementTable[rm], disp);
+            else
+                sprintf(eac, "[%s - %d]", displacementTable[rm], -disp);
+
+        }
         else
             sprintf(eac, "[%s]", displacementTable[rm]);
 
@@ -51,11 +58,17 @@ void RegMemToReg (uint8_t bytes[2], FILE* file)
         }
     case(0b01):
         {
-        uint8_t displacement;
+        int8_t displacement;
         fread(&displacement, sizeof(uint8_t), 1, file);
         
         if(displacement != 0)
-            sprintf(eac, "[%s + %d]", displacementTable[rm], displacement);
+        {     
+            if (displacement > 0)
+                sprintf(eac, "[%s + %d]", displacementTable[rm], displacement);
+            else
+                sprintf(eac, "[%s - %d]", displacementTable[rm], -displacement);
+        }
+
         else
             sprintf(eac, "[%s]", displacementTable[rm]);
 
@@ -68,8 +81,11 @@ void RegMemToReg (uint8_t bytes[2], FILE* file)
             uint8_t displacement[2];
             fread(displacement, sizeof(uint8_t), 2, file);
 
-            uint16_t disp = displacement[0] | (displacement[1] << 8);
-            sprintf(eac, "[%d]", disp);
+            int16_t disp = displacement[0] | (displacement[1] << 8);
+            if (disp > 0)
+                sprintf(eac, "[%s + %d]", displacementTable[rm], disp);
+            else
+                sprintf(eac, "[%s - %d]", displacementTable[rm], -disp);
         }
         else 
             sprintf(eac, "[%s]", displacementTable[rm]);
@@ -84,6 +100,63 @@ void RegMemToReg (uint8_t bytes[2], FILE* file)
     else
         printf("%s, %s\n", eac, regTable[reg + (8 * (dw & 1))]);
  
+}
+
+void ImmediateToRegMem(uint8_t bytes, FILE* file, bool isWide)
+{
+    // unfinished
+    return;
+    uint16_t displacement;
+    uint16_t data;
+
+    if(isWide)
+    {
+        uint8_t dispBytes[2];
+        fread(dispBytes, sizeof(uint8_t), 2, file);
+        displacement = dispBytes[0] | (dispBytes[1] << 8);
+        
+        fread(&data, sizeof(uint16_t), 1, file);
+    }
+
+    else 
+    {
+        fread(&displacement, sizeof(uint8_t), 2, file);
+        displacement &= 0x8; // Clear any garbage data
+        fread(&data, sizeof(uint8_t), 1, file);
+    }
+
+    uint8_t mod = (bytes >> 6) & 3;
+    uint8_t rm = bytes & 7;
+    
+    //if(displacement != 0)
+    //       printf("%s, [%s + %d]", displacementTable[rm], displacement);
+    //    else
+    //        sprintf(eac, "[%s]", displacementTable[rm]);
+
+}
+
+void ImmediateToReg(uint8_t instruction, FILE* file)
+{
+    uint8_t w = (instruction >> 3) & 1;
+    uint8_t reg = instruction & 7;
+    int16_t data;
+
+    if(w)
+    {
+        uint8_t displacement[2];
+        fread(displacement, sizeof(uint8_t), 2, file);
+
+        data = displacement[0] | (displacement[1] << 8);
+    }
+    else 
+    {
+        int8_t temp;
+        fread(&temp, sizeof(uint8_t), 1, file);
+        data = temp;
+    }
+    
+    printf("%s, %d\n", regTable[reg + (8 * w)], data);
+
 }
 
 int main(int numArgs, const char** args)
@@ -108,18 +181,31 @@ int main(int numArgs, const char** args)
     {
         printf("mov ");
         uint8_t opcode = instruction & 0b11111100;
+        
+        // Register/memory to/from register
         if (opcode == 0b10001000)
         {
             uint8_t bytes[2];
             bytes[0] = instruction;
             fread(bytes + 1, sizeof(uint8_t), 1, input);
             RegMemToReg(bytes, input);
+            continue;
+        }
+        
+        // Immediate to register/memory
+        if(opcode == 0b11000100)
+        {
+            uint8_t bytes;
+            fread(&bytes, sizeof(uint8_t), 1, input);
+            ImmediateToRegMem(bytes, input, instruction & 1);
+        }
+        
+        // Immediate to register
+        if(opcode & 0b10110000)
+        {
+            ImmediateToReg(instruction, input);
         }
 
-        // We only want to read specific mov instruction
-        else if(opcode == 0b1100)
-            continue;
-        
                 
         if (feof(input))
             break;
